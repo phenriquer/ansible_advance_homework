@@ -1,0 +1,51 @@
+---
+- name: Create new server "{{ server_cfg.name }}"
+  os_server:
+    cloud: "{{ cloud_cfg }}"
+    state: "{{ server_cfg.state }}"
+    name: "{{ server_cfg.name }}"
+    image: "{{ server_cfg.image }}"
+    #key_name: "{{ server_cfg.key_name }}"
+    key_name: /root/.ssh/rhkey_rsa.pem
+    flavor: "{{ server_cfg.flavor }}"
+    nics: 
+      - net-name: int_network
+    meta: "{{ server_cfg.meta }}"
+    security_groups: "{{ server_cfg.security_group }}"
+    userdata: |
+      #!/bin/bash
+      curl -o /tmp/openstack.pub http://www.opentlc.com/download/ansible_bootcamp/openstack_keys/openstack.pub
+      cat /tmp/openstack.pub >> /home/cloud-user/.ssh/authorized_keys
+      curl -o /tmp/internal.repo http://www.opentlc.com/download/ansible_bootcamp/repo/internal.repo
+      cp /tmp/internal.repo /etc/yum.repos.d/internal.repo
+  register: instance_osp
+
+- name: Instance status detailed
+  debug:
+    var: instance_osp
+    verbosity: 2
+
+- name: Add floating IP to "{{ instance_osp.server.name }}"
+  os_floating_ip:
+    cloud: "{{ cloud_cfg }}"
+    server: "{{ server_cfg.name }}"
+    network: ext_network
+    state: "{{ server_cfg.state }}"
+    reuse: yes
+    wait: true
+    timeout: 180
+  register: floating_ip
+
+- name: Show floating ip config
+  debug:
+    var: floating_ip
+    verbosity: 2
+
+- name: Wait for "{{ instance_osp.server.name }}" to be available
+  wait_for:
+    host: "{{ floating_ip.floating_ip.floating_ip_address }}"
+    port: 22
+    search_regex: OpenSSH
+    timeout: 600
+  when: floating_ip.floating_ip
+...
